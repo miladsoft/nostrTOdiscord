@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nostr Event Subscriber</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        #events { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: auto; margin-top: 20px; }
+        .event { margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-left: 3px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>Nostr Event Subscriber</h1>
+    <div>Status: <span id="status">Disconnected</span></div>
+    <div id="events"></div>
+
+    <script>
+        const relay = 'wss://relay.primal.net';
+        const pubkey = 'your_public_key_here'; // Replace with your public key
+        const eventTypes = [0, 1, 3, 7];
+        const eventsContainer = document.getElementById('events');
+        const statusElement = document.getElementById('status');
+        
+        // Discord webhook URL
+        const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1252663632828043367/....';
+        
+        // Connect to the relay
+        const socket = new WebSocket(relay);
+        
+        socket.onopen = () => {
+            statusElement.textContent = 'Connected';
+            statusElement.style.color = 'green';
+            
+            // Subscribe to the specified event types
+            const subscriptionId = 'my-subscription-' + Math.random().toString(36).substring(2, 15);
+            
+            // Get current timestamp to only receive events from now on
+            const currentTimestamp = Math.floor(Date.now() / 1000);
+            
+            const subscriptionMessage = [
+                "REQ",
+                subscriptionId,
+                {
+                    "kinds": eventTypes,
+                    "authors": [pubkey],
+                    "since": currentTimestamp // Only get events created after now
+                }
+            ];
+            
+            socket.send(JSON.stringify(subscriptionMessage));
+            addToLog('Subscribed to new events from now onwards (types: ' + eventTypes.join(', ') + ')');
+        };
+        
+        socket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                
+                // Check if this is an EVENT message
+                if (message[0] === 'EVENT' && message[1] && message[2]) {
+                    const subscriptionId = message[1];
+                    const eventData = message[2];
+                    
+                    displayEvent(eventData);
+                }
+            } catch (error) {
+                addToLog('Error parsing message: ' + error.message);
+            }
+        };
+        
+        socket.onclose = () => {
+            statusElement.textContent = 'Disconnected';
+            statusElement.style.color = 'red';
+            addToLog('Connection closed');
+        };
+        
+        socket.onerror = (error) => {
+            statusElement.textContent = 'Error';
+            statusElement.style.color = 'red';
+            addToLog('WebSocket error: ' + error.message);
+        };
+        
+        function displayEvent(event) {
+            const eventElement = document.createElement('div');
+            eventElement.className = 'event';
+            
+            const eventTypeText = getEventTypeText(event.kind);
+            const timestamp = new Date(event.created_at * 1000).toLocaleString();
+            
+            let content = event.content;
+            if (content.length > 100) {
+                content = content.substring(0, 100) + '...';
+            }
+            
+            eventElement.innerHTML = `
+                <div><strong>Type:</strong> ${event.kind} (${eventTypeText})</div>
+                <div><strong>Time:</strong> ${timestamp}</div>
+                <div><strong>Content:</strong> ${content}</div>
+            `;
+            
+            eventsContainer.prepend(eventElement);
+            
+            // Send the event to Discord
+            sendToDiscord(event, eventTypeText, timestamp);
+        }
+        
+        function sendToDiscord(event, eventTypeText, timestamp) {
+            // Get appropriate color based on event type
+            const eventColors = {
+                0: 16776960, // Yellow for Metadata
+                1: 3447003,  // Blue for Text Note
+                3: 10181046, // Purple for Contacts
+                7: 15105570, // Orange for Reaction
+                default: 7506394 // Gray for unknown
+            };
+            
+            const color = eventColors[event.kind] || eventColors.default;
+            
+            // Create client links
+            const primalLink = `https://primal.net/e/${event.id}`;
+            const nostrAtLink = `https://nostr.at/${event.id}`;
+            
+            // Format content - show full if under 250 chars, otherwise truncate with link
+            let displayContent = event.content;
+            if (displayContent.length > 250) {
+                displayContent = displayContent.substring(0, 250) + '... *(see full note in client links below)*';
+            }
+            
+            // Get tags as an array if they exist
+            const tags = event.tags ? event.tags.map(tag => `\`${tag.join(' ')}\``).join(', ') : 'None';
+            
+            const discordMessage = {
+                embeds: [{
+                    title: `📣 New Nostr Event: ${eventTypeText} (Kind: ${event.kind})`,
+                    description: displayContent,
+                    color: color,
+                    fields: [
+                        {
+                            name: "🆔 Event ID",
+                            value: `\`${event.id.substring(0, 15)}...\``,
+                            inline: true
+                        },
+                        {
+                            name: "👤 Author",
+                            value: `\`${event.pubkey.substring(0, 15)}...\``,
+                            inline: true
+                        },
+                        {
+                            name: "🕰️ Created At",
+                            value: timestamp,
+                            inline: true
+                        },
+                        {
+                            name: "🏷️ Tags",
+                            value: tags.length > 0 ? tags : "None",
+                            inline: false
+                        },
+                        {
+                            name: "🔗 View in Nostr Clients",
+                            value: `[Primal](${primalLink}) | [nostr.at](${nostrAtLink})`,
+                            inline: false
+                        }
+                    ],
+                    footer: {
+                        text: "Nostr Event Subscriber"
+                    },
+                    timestamp: new Date().toISOString()
+                }]
+            };
+
+            fetch(DISCORD_WEBHOOK_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(discordMessage)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Discord webhook error');
+                }
+                addToLog('Event sent to Discord ✅');
+            })
+            .catch(error => {
+                addToLog('Error sending to Discord: ' + error.message);
+            });
+        }
+        
+        function getEventTypeText(kind) {
+            switch (kind) {
+                case 0: return 'Metadata';
+                case 1: return 'Text Note';
+                case 3: return 'Contacts';
+                case 7: return 'Reaction';
+                default: return 'Unknown';
+            }
+        }
+        
+        function addToLog(message) {
+            const logElement = document.createElement('div');
+            logElement.textContent = message;
+            logElement.style.color = '#666';
+            eventsContainer.prepend(logElement);
+        }
+    </script>
+</body>
+</html>
