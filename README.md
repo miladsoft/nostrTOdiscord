@@ -82,7 +82,7 @@ The server will connect to the specified relay and start forwarding events to Di
      -e PUBKEY=your_public_key_here \
      -e EVENT_TYPES=0,1,3,7 \
      -e DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your_webhook_url \
-     nostr-to-discord
+     nostr-discord
    ```
 
 3. View logs:
@@ -107,7 +107,7 @@ You can also use Docker Compose for easier management. Create a `docker-compose.
 ```yaml
 version: '3'
 services:
-  nostr-to-discord:
+  nostr-discord:
     build: .
     environment:
       - RELAY_URL=wss://relay.example.com
