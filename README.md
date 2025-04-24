@@ -62,6 +62,66 @@ npm start
 
 The server will connect to the specified relay and start forwarding events to Discord. It will automatically reconnect if the connection drops.
 
+## Docker Setup
+
+### Prerequisites
+
+- Docker installed on your system
+
+### Building and Running with Docker
+
+1. Build the Docker image:
+   ```bash
+   docker build -t nostr-to-discord .
+   ```
+
+2. Run the container with your environment variables:
+   ```bash
+   docker run -d --name nostr-discord \
+     -e RELAY_URL=wss://relay.example.com \
+     -e PUBKEY=your_public_key_here \
+     -e EVENT_TYPES=0,1,3,7 \
+     -e DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your_webhook_url \
+     nostr-to-discord
+   ```
+
+3. View logs:
+   ```bash
+   docker logs -f nostr-discord
+   ```
+
+4. Stop the container:
+   ```bash
+   docker stop nostr-discord
+   ```
+
+5. Start the container again:
+   ```bash
+   docker start nostr-discord
+   ```
+
+### Using Docker Compose
+
+You can also use Docker Compose for easier management. Create a `docker-compose.yml` file:
+
+```yaml
+version: '3'
+services:
+  nostr-to-discord:
+    build: .
+    environment:
+      - RELAY_URL=wss://relay.example.com
+      - PUBKEY=your_public_key_here
+      - EVENT_TYPES=0,1,3,7
+      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/your_webhook_url
+    restart: unless-stopped
+```
+
+Then run:
+```bash
+docker-compose up -d
+```
+
 ## HTML-Only Version
 
 For simpler deployments or testing, you can use the HTML version which runs directly in a browser.
@@ -100,6 +160,7 @@ For simpler deployments or testing, you can use the HTML version which runs dire
 - **No events appearing in Discord**: Check that your public key is correct and the user is posting events
 - **Connection errors**: Verify the relay URL is correct and the relay is online
 - **CORS errors in HTML version**: This is expected when running directly from a file. Consider using the server version instead
+- **Docker issues**: Make sure Docker has network access and environment variables are set correctly
 
 ## License
 
