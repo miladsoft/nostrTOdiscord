@@ -72,7 +72,7 @@ The server will connect to the specified relay and start forwarding events to Di
 
 1. Build the Docker image:
    ```bash
-   docker build -t nostr-to-discord .
+   docker build -t nostr-discord .
    ```
 
 2. Run the container with your environment variables:
